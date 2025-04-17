@@ -3,22 +3,27 @@ package rsa.ride;
 import rsa.RideSharingAppException;
 import rsa.match.Location;
 import rsa.match.RideMatch;
+import rsa.user.User;
 import rsa.match.PreferredMatch;
 import rsa.shared.HasPoint;
-import rsa.user.User;
 
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.Comparator;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class Ride implements HasPoint,RideMatchSorter {
+/**
+ * Representa uma boleia (como condutor ou passageiro).
+ * Implementa HasPoint para suportar geolocalização via QuadTrees.
+ */
+public class Ride implements HasPoint, RideMatchSorter {
     private static final AtomicLong idGenerator = new AtomicLong(0);
+
     private long id;
     private User user;
     private Location from;
     private Location to;
     private Location current;
     private float cost;
-    private String plate;
+    private String plate; // se for null, é passageiro
     private RideMatch match;
 
     public Ride(User user, Location from, Location to, String plate, float cost) throws RideSharingAppException {
@@ -51,7 +56,11 @@ public class Ride implements HasPoint,RideMatchSorter {
     public Location getCurrent() { return current; }
     public void setCurrent(Location current) { this.current = current; }
 
+    // Métodos exigidos por HasPoint
+    @Override
     public double x() { return current.x(); }
+
+    @Override
     public double y() { return current.y(); }
 
     public float getCost() { return cost; }
@@ -62,36 +71,40 @@ public class Ride implements HasPoint,RideMatchSorter {
 
     public RideMatch getMatch() { return match; }
     public void setMatch(RideMatch match) { this.match = match; }
-    public boolean isMatch() { return match != null; }
+
+    public boolean isMatched() { return match != null; }
 
     public RideRole getRideRole() {
         return isDriver() ? RideRole.DRIVER : RideRole.PASSENGER;
     }
 
+    /**
+     * Devolve um comparador de RideMatch com base na preferência do utilizador.
+     * Pode ordenar por melhor avaliação, preço mais barato ou maior proximidade.
+     */
     @Override
     public Comparator<RideMatch> getComparator() {
-        return (m1,m2) -> {
-            switch (m1.getRide().getRideRole()) {
-                case BETTER:
-                    double avg1 = m1.getDriverRide().getUser().getAverage(RideRole.DRIVER);
-                    double avg2 = m2.getDriverRide().getUser().getAverage(RideRole.DRIVER);
-                    return Double.compare(avg1, avg2);
-                case CHEAPER:
-                    return Float.compare(m1.getDriverRide().getCost(), m2.getDriverRide().getCost());
-                case CLOSER:
-                    double d1 = distance(m1.getDriverRide().getCurrent(), m1.getDriverRide().getFrom());
-                    double d2 = distance(m2.getDriverRide().getCurrent(), m2.getDriverRide().getFrom());
-                    return Double.compare(d1, d2);
-                default:
-                    return 0;
-            }
+        PreferredMatch preference = user.getPreferredMatch();
+
+        return switch (preference) {
+            case BETTER -> Comparator.comparingDouble(
+                m -> -m.getRide(RideRole.DRIVER).getUser().getAverage(RideRole.DRIVER)
+            );
+
+            case CHEAPER -> Comparator.comparingDouble(
+                m -> m.getRide(RideRole.DRIVER).getCost()
+            );
+
+            case CLOSER -> Comparator.comparingDouble(
+                m -> distance(m.getRide(RideRole.DRIVER).getCurrent(), m.getRide(RideRole.DRIVER).getFrom())
+            );
         };
     }
 
-    //implement
     private double distance(Location a, Location b) {
         double dx = a.x() - b.x();
         double dy = a.y() - b.y();
         return Math.sqrt(dx * dx + dy * dy);
     }
 }
+
