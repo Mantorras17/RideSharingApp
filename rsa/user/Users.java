@@ -8,81 +8,83 @@ import java.util.Map;
 
 public class Users implements Serializable {
     private static final long serialVersionUID = 1L;
-    private static Users instance = null;
-    private Map<String, User> users = new HashMap<String, User>();
-    private static File usersFile = new File("users.ser");
 
-    public static Users getInstance() {
-        if (instance == null) {
-            instance = loadUsers();
-            if (instance == null) {
-                instance = new Users();
-            }
-        }
+    // 🔒 Singleton e ficheiro de persistência
+    private static Users instance;
+    private static File usersFile;
+
+    // Mapa de utilizadores registados (nick → User)
+    private Map<String, User> users = new HashMap<>();
+
+    // Construtor privado (padrão Singleton)
+    private Users() {}
+
+    // 🔧 Define o ficheiro para guardar os dados
+    public static void setUsersFile(File file) {
+        usersFile = file;
+    }
+
+    // 🔁 Acede à instância única (Singleton)
+    public static Users getInstance() throws RideSharingAppException {
+        if (instance == null)
+            instance = load();
         return instance;
     }
 
-    public static File getUsersFile() { return usersFile; }
-
-    public static void setUsersFile(File file) { usersFile = file; }
-
-    public User register(String nick, String name) {
-        // exceptions if (nick == null || name == null)
-        if (users.containsKey(nick)) {
-            //throw exception
-        }
-        User newUser = new User(nick, name);
-        users.put(nick, newUser);
-        saveUsers();
-        return newUser;
+    // ✍️ Regista um novo utilizador
+    public User register(String nick, String name) throws RideSharingAppException {
+        if (users.containsKey(nick))
+            throw new RideSharingAppException("Nickname já registado: " + nick);
+        User user = new User(nick, name);
+        users.put(nick, user);
+        save();
+        return user;
     }
 
+    // 📥 Devolve o utilizador com esse nick (ou null)
     public User getUser(String nick) {
         return users.get(nick);
     }
 
-    public User getOrCreateUser(String nick, String name) {
-        User user = users.get(nick);
-        if (user == null) {
-            user = register(nick, name);
-        }
-        return user;
+    // 📦 Obtém um utilizador ou cria-o, se não existir
+    public User getOrCreateUser(String nick, String name) throws RideSharingAppException {
+        User user = getUser(nick);
+        return user != null ? user : register(nick, name);
     }
 
+    // 🔐 Verifica a autenticação
     public boolean authenticate(String nick, String key) {
-        User user = users.get(nick);
-        return user!=null && user.authenticate(key);
+        User user = getUser(nick);
+        return user != null && user.authenticate(key);
     }
 
+    // 🔄 Apaga todos os dados (para testes)
     public void reset() {
         users.clear();
-        instance = null;
-        if (usersFile.exists()) {
+        if (usersFile != null && usersFile.exists())
             usersFile.delete();
+        instance = null;
+    }
+
+    // 📤 Guarda os dados no ficheiro
+    private void save() throws RideSharingAppException {
+        if (usersFile == null) return;
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(usersFile))) {
+            out.writeObject(this);
+        } catch (IOException e) {
+            throw new RideSharingAppException("Erro ao guardar utilizadores", e);
         }
     }
 
-
-
-    //NEW METHODS, IMPLEMENT TESTS
-    public void saveUsers() {
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(usersFile))) {
-            oos.writeObject(instance);
+    // 📥 Carrega os dados do ficheiro (ou cria novo)
+    private static Users load() throws RideSharingAppException {
+        if (usersFile != null && usersFile.exists()) {
+            try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(usersFile))) {
+                return (Users) in.readObject();
+            } catch (IOException | ClassNotFoundException e) {
+                throw new RideSharingAppException("Erro ao carregar utilizadores", e);
+            }
         }
-        catch (IOException e) {
-            throw new RuntimeException("Error saving users.", e);
-        }
-    }
-
-    public static Users loadUsers() {
-        if (!usersFile.exists()) {
-            return null;
-        }
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(usersFile))) {
-            return (Users) ois.readObject();
-        }
-        catch (IOException | ClassNotFoundException e) {
-            return null;
-        }
+        return new Users();
     }
 }
