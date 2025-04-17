@@ -6,29 +6,31 @@ import rsa.user.User;
 import rsa.user.Car;
 import rsa.RideSharingAppException;
 
-public class RideMatch {
-    private Ride driverRide;
-    private Ride passengerRide;
+import java.io.Serializable;
+
+public class RideMatch implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private final Ride driverRide;
+    private final Ride passengerRide;
+    private final long id;
 
     public RideMatch(Ride left, Ride right) throws RideSharingAppException {
         if (left == null || right == null) {
-            throw new RideSharingAppException("Ride or passenger ride is null");
+            throw new RideSharingAppException("Ride is null.");
         }
-        if (!left.isDriver() || right.isDriver()) {
-            throw new RideSharingAppException("Incompatible ride types.");
+
+        if (left.isDriver() == right.isDriver()) {
+            throw new RideSharingAppException("Both rides are drivers or both are passengers.");
         }
-        if (left.isDriver() || right.isPassenger()) {
-            this.driverRide = left;
-            this.passengerRide = right;
-        }
-        else {
-            this.driverRide = right;
-            this.passengerRide = left;
-        }
+
+        this.driverRide = left.isDriver() ? left : right;
+        this.passengerRide = left.isPassenger() ? left : right;
+        this.id = driverRide.getId(); // ou: RideMatch.counter++
     }
 
     public long getId() {
-        return driverRide.getId();
+        return id;
     }
 
     public Ride getRide(RideRole role) {
@@ -48,14 +50,11 @@ public class RideMatch {
     }
 
     public Car getCar() {
-        return driverRide.getMatch().getCar();
+        return driverRide.getUser().getCar(driverRide.getPlate());
     }
 
     public float getCost() {
-        return driverRide.getMatch().getCost();
-    }
-
-    boolean matchable() {
-        return driverRide.getRole() != passengerRide.getRole();
+        return driverRide.getCost();
     }
 }
+
